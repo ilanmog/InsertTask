@@ -73,12 +73,16 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="DBHandlerFactory.cs" />
     <Compile Include="GenericTask.cs" />
     <Compile Include="GenericTaskReader.cs" />
+    <Compile Include="IDBHandler.cs" />
+    <Compile Include="IDBHandlerFactory.cs" />
     <Compile Include="IGenericTaskReader.cs" />
     <Compile Include="InsertTaskSettings.cs" />
     <Compile Include="NoteLine.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SqLiteDBHandler.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />

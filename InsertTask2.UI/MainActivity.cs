@@ -36,16 +36,18 @@ namespace InsertTask2.UI {
         private string _accessToken = null;
         private AndroidAuthSession _session = null;
         private const int TASKS_COUNTER = 1000;
-        private SQLiteConnection _db;
         private bool _populateAfterAuthorize = false;
         private bool _startActivityAfterAuthorize = false;
         private bool _insertAfterAuthorize = false;
         private bool _doNothingAfterAuthorize = false;
         private GenericTask _taskToStartActivity = null;
+        private IDBHandlerFactory _dbHandlerFactory = new DBHandlerFactory();
+        private IDBHandler _dbHandler = null;
         private const string ACCESS_TOKEN_PROP = "access_token";
         private const int ACTIVITY_RESULT_INSERT_TASK = 1;
         protected override void OnCreate(Bundle savedInstanceState) {
             base.OnCreate(savedInstanceState);
+            _dbHandler = _dbHandlerFactory.CreateDBHandler();
             // Set our view from the "main" layout resource
             SetContentView(Resource.Layout.Main);
             _listView = FindViewById<ListView>(Resource.Id.listTasksView);
@@ -59,9 +61,9 @@ namespace InsertTask2.UI {
             var toolbar = FindViewById<Toolbar>(Resource.Id.toolbar);
             SetActionBar(toolbar);
             ActionBar.Title = "Tasks";
-            SetupSql();
-            _data = _db.Table<GenericTask>().ToList();
-            var accessTokenPropery = _db.Find<InsertTaskSetting>(ACCESS_TOKEN_PROP);
+            _dbHandler.Init();
+            _data = _dbHandler.GetTasks();
+            var accessTokenPropery = _dbHandler.GetSetting(ACCESS_TOKEN_PROP);
             if (accessTokenPropery != null) {
                 _accessToken = accessTokenPropery.Value;
             }
@@ -69,7 +71,7 @@ namespace InsertTask2.UI {
         }
 
         private void SearchView_Close(object sender, SearchView.CloseEventArgs e) {
-            _data = _db.Table<GenericTask>().ToList();
+            _data = _dbHandler.GetTasks();
             RenderItems(_listView, _data);
         }
 
@@ -99,7 +101,7 @@ namespace InsertTask2.UI {
                     // Will bind the user's access token to the session.
                     _session.FinishAuthentication();
                     _accessToken = _session.OAuth2AccessToken;
-                    _db.InsertOrReplace(new InsertTaskSetting() {
+                    _dbHandler.MergeSettings(new InsertTaskSetting() {
                         Name = ACCESS_TOKEN_PROP,
                         Value = _accessToken
                     });
@@ -126,13 +128,7 @@ namespace InsertTask2.UI {
                 }
             }
         }
-        private void SetupSql() {
-            string dbPath = Path.Combine(
-                System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal), "insertTask.db3");
-            _db = new SQLiteConnection(dbPath);
-            _db.CreateTable<GenericTask>();
-            _db.CreateTable<InsertTaskSetting>();
-        }
+        
 
         public override bool OnCreateOptionsMenu(IMenu menu) {
             MenuInflater.Inflate(Resource.Menu.top_menus, menu);
@@ -195,7 +191,7 @@ namespace InsertTask2.UI {
                     Title = title
                 };
                 _data.Add(genericTask);
-                _db.Insert(genericTask);
+                _dbHandler.InsertGenericTask(genericTask);
                 Toast.MakeText(this, "Tasks updated", ToastLength.Short).Show();
 
                 _adapterList.Add(new JavaDictionary<string, object> {
@@ -242,10 +238,15 @@ namespace InsertTask2.UI {
             var actualFiles = GetActualFiles(_accessToken);
             _reader = new GenericTaskReader(tasksContent, actualFiles);
             _data = _reader.GetTasks();
-            _db.DeleteAll<GenericTask>();
-            //_db.InsertAll(_data);
+            _dbHandler.ClearTasks();
+
             foreach (var item in _data) {
-                _db.Insert(item);
+                try {
+                    _dbHandler.InsertGenericTask(item);
+                }
+                catch (SQLiteException e) {
+                    Toast.MakeText(this, "Error: " + e.Message + ". item::" + item.Identifier, ToastLength.Long).Show();
+                }
             }
             RenderItems(_listView, _data);
         }
@@ -314,7 +315,7 @@ namespace InsertTask2.UI {
 
         private ICollection<GenericTask> FindTasks(string searchTerm) {
             var value = searchTerm.ToLower();
-            var tasks= _db.Table<GenericTask>().ToList();
+            var tasks = _dbHandler.GetTasks();
             return tasks.Where(g =>
             g.Identifier.ToLower().Contains(value) ||
             g.Title.ToLower().Split(' ').Any(x => x.Contains(value))
