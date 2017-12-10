@@ -198,17 +198,17 @@ namespace InsertTask2.UI {
                             { "identifier", genericTask.Identifier },
                             { "title", genericTask.Title }
                         });
-                (_listView.Adapter as SimpleAdapter).NotifyDataSetChanged();
-            }
-            else {
+                RenderItems(_listView, _data);
+            } else {
                 Toast.MakeText(this, "Error: Unable to insert task", ToastLength.Short).Show();
             }
         }
 
         private string GetNewIdentifier() {
             HashSet<int> iterations = new HashSet<int>();
-        
-            foreach (var item in _data.Select(d=>int.Parse(d.Identifier.Split('.')[1])).OrderBy(c => c)) {
+
+            foreach (var item in _data.Where(d => d.Identifier.Contains(".")).Select(d => int.Parse(d.Identifier.Split('.')[1])).OrderBy(c => c)) {
+
                 iterations.Add(item);
             }
             int i = 1;
