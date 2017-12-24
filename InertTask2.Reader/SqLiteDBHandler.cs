@@ -30,6 +30,10 @@ namespace InertTask2.Reader {
             _db.Insert(task);
         }
 
+        public void MergeActualFiles(IEnumerable<ActualFile> actualFiles) {
+            _db.DeleteAll<ActualFile>();
+            _db.InsertAll(actualFiles);
+        }
         public void MergeSettings(InsertTaskSetting settings) {
             _db.InsertOrReplace(settings);
         }
@@ -39,6 +43,7 @@ namespace InertTask2.Reader {
             _db = new SQLiteConnection(dbPath);
             _db.CreateTable<GenericTask>();
             _db.CreateTable<InsertTaskSetting>();
+            _db.CreateTable<ActualFile>();
         }
     }
 }

@@ -10,10 +10,10 @@ namespace InertTask2.Reader {
         StringBuilder sb = null;
         private static Regex _tasksRegex = new Regex(@"^\t(?<identifier>(?<completed>[\+])?(?<outside>[X])?(?<category>[ABCD])[TJ]?[0-9\.]+)\:\:(?<title>.*)$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Multiline);
         private string _tasksContent;
-        private HashSet<string> _actualFiles;
-        public GenericTaskReader(string tasksContent, string[] actualFiles) {
+        private List<ActualFile> _actualFiles;
+        public GenericTaskReader(string tasksContent, IEnumerable<ActualFile> actualFiles) {
             _tasksContent = tasksContent;
-            _actualFiles = new HashSet<string>();
+            _actualFiles = new List<ActualFile>();
             foreach (var file in actualFiles) {
                 _actualFiles.Add(file);
             }
@@ -24,7 +24,7 @@ namespace InertTask2.Reader {
                 return new GenericTask() {
                     Identifier = identifier,
                     IsCompleted = m.Groups["completed"].Success,
-                    IsOutside = m.Groups["outside"].Success && _actualFiles.Contains(identifier + ".txt"),
+                    IsOutside = m.Groups["outside"].Success && _actualFiles.Exists(x=>x.Path == (identifier + ".txt")),
                     Title = m.Groups["title"].Value,
                     Category = m.Groups["category"].Value
                 };

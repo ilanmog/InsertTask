@@ -22,6 +22,7 @@ using System.Text.RegularExpressions;
 using Android.Content;
 using System.Text;
 using SQLite;
+using Dropbox.Api.Files;
 
 namespace InsertTask2.UI {
     [Activity(Label = "InsertTask2.UI", MainLauncher = true)]
@@ -45,6 +46,18 @@ namespace InsertTask2.UI {
         private IDBHandler _dbHandler = null;
         private const string ACCESS_TOKEN_PROP = "access_token";
         private const int ACTIVITY_RESULT_INSERT_TASK = 1;
+        private IEnumerable<ActualFile> ActualFiles {
+            get {
+                if (_actualFiles == null) {
+                    _actualFiles = GetActualFiles(_accessToken).ToList();
+                }
+                return _actualFiles;
+            }
+            set {
+                _actualFiles = value;
+            }
+        }
+        private IEnumerable<ActualFile> _actualFiles = null;
         protected override void OnCreate(Bundle savedInstanceState) {
             base.OnCreate(savedInstanceState);
             _dbHandler = _dbHandlerFactory.CreateDBHandler();
@@ -172,36 +185,39 @@ namespace InsertTask2.UI {
             var content = GetTasksContent(_accessToken);
             var index = content.IndexOf("Tasks\r\n");
             content = content.Insert(index + 7, "\t" + identifier + "::" + title + "\r\n");
-            var task = Task.Run(async () => {
-                using (var dbx = new DropboxClient(_accessToken)) {
-                    var mem = new MemoryStream(Encoding.UTF8.GetBytes(content));
-                    await dbx.Files.UploadAsync("/Development/Tasks.txt", Dropbox.Api.Files.WriteMode.Overwrite.Instance, false, null, false, mem);
-                }
-            });
-            task.Wait();
+            var task = Task.Run(() => {
+                var dbx = new DropboxClient(_accessToken);
+                var mem = new MemoryStream(Encoding.UTF8.GetBytes(content));
+                dbx.Files.UploadAsync("/Development/Tasks.txt", Dropbox.Api.Files.WriteMode.Overwrite.Instance, false, null, false, mem).ContinueWith(m => {
+                    if (m.IsCompleted && m.Status == TaskStatus.RanToCompletion) {
+                        var genericTask = new GenericTask() {
+                            Category = "B",
+                            Identifier = identifier,
+                            IsCompleted = false,
+                            IsOutside = false,
+                            Title = title
+                        };
+                        //_data.Add(genericTask);
+                        _dbHandler.InsertGenericTask(genericTask);
 
-            bool succeed = task.Wait(10000);
+                        RunOnUiThread(() => Toast.MakeText(this, "Tasks updated", ToastLength.Short).Show());
 
-            if (succeed && task.IsCompleted) {
-                var genericTask = new GenericTask() {
-                    Category = "B",
-                    Identifier = identifier,
-                    IsCompleted = false,
-                    IsOutside = false,
-                    Title = title
-                };
-                _data.Add(genericTask);
-                _dbHandler.InsertGenericTask(genericTask);
-                Toast.MakeText(this, "Tasks updated", ToastLength.Short).Show();
-
-                _adapterList.Add(new JavaDictionary<string, object> {
-                            { "identifier", genericTask.Identifier },
-                            { "title", genericTask.Title }
+                        _adapterList.Add(new JavaDictionary<string, object> {
+                        { "identifier", genericTask.Identifier },
+                        { "title", genericTask.Title }
+                    });
+                        RunOnUiThread(()=> {
+                            RepopulateTasksFromContent(content);
+                            _listView.DeferNotifyDataSetChanged();
                         });
-                RenderItems(_listView, _data);
-            } else {
-                Toast.MakeText(this, "Error: Unable to insert task", ToastLength.Short).Show();
-            }
+                    } else {
+                        RunOnUiThread(()=> Toast.MakeText(this, "Error: Unable to insert task", ToastLength.Short).Show());
+                    }
+                    dbx.Dispose();
+                }
+               );
+            });
+            
         }
 
         private string GetNewIdentifier() {
@@ -232,11 +248,8 @@ namespace InsertTask2.UI {
                 ((SwipeRefreshLayout)sender).Refreshing = false;
             }
         }
-
-        private void RepopulateTasks() {
-            var tasksContent = GetTasksContent(_accessToken);
-            var actualFiles = GetActualFiles(_accessToken);
-            _reader = new GenericTaskReader(tasksContent, actualFiles);
+        private void RepopulateTasksFromContent(string tasksContent) {
+            _reader = new GenericTaskReader(tasksContent, ActualFiles);
             _data = _reader.GetTasks();
             _dbHandler.ClearTasks();
 
@@ -250,7 +263,13 @@ namespace InsertTask2.UI {
             }
             RenderItems(_listView, _data);
         }
-        private string[] GetActualFiles(string accessToken) {
+        private void RepopulateTasks() {
+            var tasksContent = GetTasksContent(_accessToken);
+            ActualFiles = GetActualFiles(_accessToken).ToList();
+            RepopulateTasksFromContent(tasksContent);
+
+        }
+        private IEnumerable<ActualFile> GetActualFiles(string accessToken) {
             var task = Task.Run(async () => {
                 using (var dbx = new DropboxClient(accessToken)) {
                     var content = await dbx.Files.ListFolderAsync(new Dropbox.Api.Files.ListFolderArg("/Development"));
@@ -259,11 +278,12 @@ namespace InsertTask2.UI {
             });
             task.Wait();
 
-            string[] result = null;
+            IEnumerable<ActualFile> result = null;
             bool succeed = task.Wait(10000);
 
             if (succeed && task.IsCompleted) {
-                result = task.Result;
+                result = task.Result.Select(r=>new ActualFile() { Path = r });
+                _dbHandler.MergeActualFiles(result);
             }
             else {
                 Toast.MakeText(this, "Error: Unable to get task", ToastLength.Short).Show();

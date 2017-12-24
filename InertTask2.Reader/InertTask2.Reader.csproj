@@ -73,6 +73,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ActualFile.cs" />
     <Compile Include="DBHandlerFactory.cs" />
     <Compile Include="GenericTask.cs" />
     <Compile Include="GenericTaskReader.cs" />
